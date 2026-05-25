@@ -10,9 +10,14 @@ const MIME_BY_EXT = {
   ".bmp": "image/bmp",
 };
 
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return MIME_BY_EXT[ext] || "image/png";
+}
+
 /**
- * Resolve any image source (file path, URL, data URI) into a base64 data URI
- * that can be sent directly to OpenRouter's vision endpoint.
+ * Resolve any image source (file path, file:// URI, https:// URL, data URI)
+ * into a base64 data URI for OpenRouter vision endpoints.
  */
 export async function resolveImageSource(source) {
   if (source.startsWith("data:")) return source;
@@ -25,9 +30,26 @@ export async function resolveImageSource(source) {
     return `data:${ct};base64,${buf.toString("base64")}`;
   }
 
-  if (source.startsWith("/") || source.startsWith("./") || source.startsWith("../")) {
-    const buf = await fs.readFile(path.normalize(source));
-    return `data:image/png;base64,${buf.toString("base64")}`;
+  let filePath = source;
+
+  // Strip file:// prefix and URL-decode (e.g. %20 → space, %28 → ()
+  if (/^file:\/\//i.test(filePath)) {
+    filePath = filePath.replace(/^file:\/\/+/, "/");
+  }
+  filePath = decodeURIComponent(filePath);
+
+  if (filePath.startsWith("/") || filePath.startsWith("./") || filePath.startsWith("../")) {
+    filePath = path.normalize(filePath);
+    try {
+      const buf = await fs.readFile(filePath);
+      const mime = getMimeType(filePath);
+      return `data:${mime};base64,${buf.toString("base64")}`;
+    } catch (e) {
+      if (e.code === "ENOENT") {
+        throw new Error(`Image file not found: ${filePath}`);
+      }
+      throw e;
+    }
   }
 
   throw new Error(`Cannot resolve image source: ${source}`);
