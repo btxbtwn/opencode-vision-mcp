@@ -29,10 +29,14 @@ export async function analyze_image(args) {
     messages: [{ role: "user", content: imageContent(dataUri, prompt) }],
   });
 
+  if (!res.choices || !res.choices[0]) {
+    throw new Error(`OpenRouter returned no choices: ${JSON.stringify(res)}`);
+  }
+
   return {
     text: res.choices[0]?.message?.content || "",
     model: res.model,
-    usage: res.usage,
+    usage: res.usage || null,
   };
 }
 
